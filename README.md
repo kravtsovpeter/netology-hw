@@ -5,5 +5,5 @@
 ## Задание 2
 [Ссылка на коммит](https://github.com/kravtsovpeter/netology-hw/commit/cd4870b38653d3d6cbc27ccc94efeddbf02e141b)
 
-
-
+## Задание 3
+[Ссылка на граф коммитов](https://github.com/kravtsovpeter/netology-hw/network)
