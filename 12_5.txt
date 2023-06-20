@@ -1,0 +1,56 @@
+# Домашнее задание к занятию "12.5 Индексы" - `Кравцов Петр`
+
+### Задание 1
+
+![Запрос](https://github.com/kravtsovpeter/netology-hw/blob/main/img/12_5_1.png)
+![Запрос](https://github.com/kravtsovpeter/netology-hw/blob/main/img/12_5_1_1.png)
+
+
+### Задание 2
+
+Выполнили EXPLAIN ANALYZE
+
+-> Table scan on <temporary>  (cost=2.5..2.5 rows=0) (actual time=8597..8597 rows=391 loops=1)
+    -> Temporary table with deduplication  (cost=0..0 rows=0) (actual time=8597..8597 rows=391 loops=1)
+        -> Window aggregate with buffering: sum(payment.amount) OVER (PARTITION BY c.customer_id,f.title )   (actual time=3337..8326 rows=642000 loops=1)
+            -> Sort: c.customer_id, f.title  (actual time=3337..3463 rows=642000 loops=1)
+                -> Stream results  (cost=22e+6 rows=16.1e+6) (actual time=0.519..2469 rows=642000 loops=1)
+                    -> Nested loop inner join  (cost=22e+6 rows=16.1e+6) (actual time=0.515..1993 rows=642000 loops=1)
+                        -> Nested loop inner join  (cost=20.4e+6 rows=16.1e+6) (actual time=0.512..1721 rows=642000 loops=1)
+                            -> Nested loop inner join  (cost=18.8e+6 rows=16.1e+6) (actual time=0.508..1422 rows=642000 loops=1)
+                                -> Inner hash join (no condition)  (cost=1.61e+6 rows=16.1e+6) (actual time=0.499..88.2 rows=634000 loops=1)
+                                    -> Filter: (cast(p.payment_date as date) = '2005-07-30')  (cost=1.68 rows=16086) (actual time=0.0417..9.42 rows=634 loops=1)
+                                        -> Table scan on p  (cost=1.68 rows=16086) (actual time=0.0262..5.87 rows=16044 loops=1)
+                                    -> Hash
+                                        -> Covering index scan on f using idx_title  (cost=110 rows=1000) (actual time=0.0332..0.323 rows=1000 loops=1)
+                                -> Covering index lookup on r using rental_date (rental_date=p.payment_date)  (cost=0.969 rows=1) (actual time=0.00131..0.00188 rows=1.01 loops=634000)
+                            -> Single-row index lookup on c using PRIMARY (customer_id=r.customer_id)  (cost=250e-6 rows=1) (actual time=217e-6..248e-6 rows=1 loops=642000)
+                        -> Single-row covering index lookup on i using PRIMARY (inventory_id=r.inventory_id)  (cost=250e-6 rows=1) (actual time=180e-6..211e-6 rows=1 loops=642000)
+
+
+1. Можно использовать джойны а не перечисление таблиц в запросе
+2. Оконная функция излишняя
+3. Не используется таблица inventory
+4. Можно создать индекс на payment_date
+
+ЗАпрос получился таким 
+select distinct concat(c.last_name, ' ', c.first_name), sum(p.amount) 
+from payment p
+	join rental r on p.payment_date = r.rental_date 
+	join customer c on c.customer_id = r.customer_id 
+where date(p.payment_date) = '2005-07-30'
+GROUP by(c.customer_id)
+
+индекс создали так
+CREATE INDEX pay_dat ON payment(payment_date);
+
+
+EXPLAIN ANALYZE нового запроса 
+-> Sort with duplicate removal: `concat(c.last_name, ' ', c.first_name)`, `sum(p.amount)`  (actual time=58.7..58.8 rows=391 loops=1)
+    -> Table scan on <temporary>  (actual time=58.4..58.5 rows=391 loops=1)
+        -> Aggregate using temporary table  (actual time=58.4..58.4 rows=391 loops=1)
+            -> Nested loop inner join  (cost=11238 rows=16102) (actual time=0.217..57.5 rows=642 loops=1)
+                -> Nested loop inner join  (cost=5602 rows=15831) (actual time=0.0861..20.1 rows=16044 loops=1)
+                    -> Table scan on c  (cost=61.2 rows=599) (actual time=0.0395..0.289 rows=599 loops=1)
+                    -> Index lookup on r using idx_fk_customer_id (customer_id=c.customer_id)  (cost=6.61 rows=26.4) (actual time=0.0254..0.031 rows=26.8 loops=599)
+                -> Index lookup on p using pay_dat (payment_date=r.rental_date), with index condition: (cast(p.payment_date as date) = '2005-07-30')  (cost=0.254 rows=1.02) (actual time=0.00212..0.00214 rows=0.04 loops=16044)
